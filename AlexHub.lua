@@ -1,123 +1,122 @@
 --[[
-    Steal An Egg - Ultimate Extreme Perf + Chill AFK (Full File)
-    - Fix lag mạnh tay (Ép phẳng, xóa texture, xóa hiệu ứng, giảm render distance)
-    - Giao diện Chill AFK (Đồng hồ đếm giờ, Quotes đổi liên tục)
-    - Trình phát YouTube (Playlist Lã Phong Lâm & Minecraft)
+    Steal An Egg - NO MERCY EDITION
+    - Xóa sổ mọi Texture, Decal, GUI phụ.
+    - Ép tất cả vật liệu thành SmoothPlastic.
+    - Tắt mọi ánh sáng, sương mù, hiệu ứng.
+    - Giới hạn render distance xuống mức tối thiểu.
+    - Vẫn giữ Widget xem YouTube ở góc màn hình.
 ]]
 
 local Workspace = game:GetService("Workspace")
 local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
-local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
--- Dọn dẹp UI cũ (nếu có)
-local oldUI = playerGui:FindFirstChild("SAE_ChillUI")
-if oldUI then oldUI:Destroy() end
-local oldWebView = playerGui:FindFirstChild("WebView")
-if oldWebView then oldWebView:Destroy() end
+-- Dọn dẹp UI cũ
+for _, name in ipairs({"SAE_ChillUI", "WebView"}) do
+    local old = playerGui:FindFirstChild(name)
+    if old then old:Destroy() end
+end
 
 -- =====================================================================
--- PHẦN 1: TỐI ƯU HÓA CỰC ĐOAN (MẠNH TAY) - DÀNH CHO MÁY YẾU
+-- PHẦN 1: HỦY DIỆT ĐỒ HỌA (NO MERCY)
 -- =====================================================================
 
--- Hàm xử lý từng Object trong game
-local function extremeClean(obj)
-    -- 1. Xóa mọi hiệu ứng hạt, vệt sáng
-    if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam") then
-        obj.Enabled = false
+local function totalWipe(obj)
+    -- 1. Xóa sổ mọi thứ chuyển động/hiệu ứng
+    if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam") or obj:IsA("Smoke") or obj:IsA("Fire") or obj:IsA("Sparkles") then
         obj:Destroy()
     
-    -- 2. Xóa mọi nguồn sáng (đèn)
+    -- 2. Tắt mọi nguồn sáng
     elseif obj:IsA("PointLight") or obj:IsA("SpotLight") or obj:IsA("SurfaceLight") then
-        obj.Enabled = false
         obj:Destroy()
         
-    -- 3. XÓA SẠCH TEXTURE VÀ DECAL (Mạnh tay nhất, giúp tăng FPS vọt)
+    -- 3. Xóa sổ Texture và Decal (MẤT HÌNH ẢNH)
     elseif obj:IsA("Decal") or obj:IsA("Texture") then
-        obj.Transparency = 1
         obj:Destroy()
         
-    -- 4. Xóa Text bay lên (BillboardGui, SurfaceGui)
+    -- 4. Xóa mọi Text bay lên (BillboardGui, SurfaceGui)
     elseif obj:IsA("BillboardGui") or obj:IsA("SurfaceGui") then
         local parent = obj.Parent
         if parent and parent:IsA("BasePart") then
             local char = parent:FindFirstAncestorOfClass("Model")
-            -- Giữ lại UI của nhân vật mình, xóa của người khác
             if char and Players:GetPlayerFromCharacter(char) == player then return end
         end
-        obj.Enabled = false
         obj:Destroy()
         
-    -- 5. Ép vật liệu thành phẳng (SmoothPlastic) và xóa phản chiếu
+    -- 5. Ép vật liệu phẳng lì, xóa phản chiếu
     elseif obj:IsA("BasePart") then
-        if not obj.Anchored then -- Chỉ ép vật liệu cho các vật thể động (như nhân vật, pet)
+        pcall(function()
             obj.Material = Enum.Material.SmoothPlastic
             obj.Reflectance = 0
-        end
+            obj.CastShadow = false -- Không đổ bóng
+        end)
     end
 end
 
--- Hàm tối ưu môi trường (Ánh sáng, sương mù)
-local function extremeEnvironment()
+local function destroyEnvironment()
+    -- Xóa sương mù, bóng đổ, ép ánh sáng sáng trưng
     Lighting.GlobalShadows = false
     Lighting.FogEnd = 9e9
     Lighting.FogStart = 9e9
-    Lighting.OutdoorAmbient = Color3.new(1, 1, 1) -- Sáng trưng
+    Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
     Lighting.EnvironmentDiffuseScale = 0
     Lighting.EnvironmentSpecularScale = 0
+    Lighting.Ambient = Color3.new(1, 1, 1)
     
+    -- Xóa hiệu ứng môi trường
     for _, v in ipairs(Lighting:GetDescendants()) do
         if v:IsA("Atmosphere") or v:IsA("BloomEffect") or v:IsA("BlurEffect") or v:IsA("SunRaysEffect") or v:IsA("ColorCorrectionEffect") then
-            v.Enabled = false
             v:Destroy()
         end
     end
     
-    -- Tắt xử lý vật lý ở xa (Streaming) để giảm tải RAM/CPU
+    -- GIỚI HẠN RENDER DISTANCE (Cực kỳ quan trọng)
     pcall(function()
         Workspace.StreamingEnabled = true
-        Workspace.StreamingTargetRadius = 128 -- Chỉ load trong bán kính 128 studs
+        Workspace.StreamingTargetRadius = 64 -- Chỉ load trong bán kính 64 studs
     end)
 
-    -- Cố gắng ép đồ họa Roblox xuống mức thấp nhất
+    -- Ép đồ họa xuống mức thấp nhất có thể
     pcall(function()
         settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
         settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level01
+        settings().Rendering.EagerBulkExecution = true
     end)
 end
 
--- Hàm dọn dẹp liên tục (Live Cleaner)
-local function setupLiveCleaner()
-    -- Lắng nghe xem có Object mới sinh ra không
-    Workspace.DescendantAdded:Connect(function(obj)
-        task.wait(0.1)
-        extremeClean(obj)
-    end)
+local function startWiper()
+    -- Quét sạch ngay lập tức
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        totalWipe(obj)
+    end
     
-    -- Cứ mỗi 1 giây lại quét toàn bản đồ 1 lần
+    -- Quét liên tục mỗi 0.1 giây (siêu tốc)
     task.spawn(function()
-        while task.wait(1) do 
+        while task.wait(0.1) do
             for _, obj in ipairs(Workspace:GetDescendants()) do
                 if obj:IsA("ParticleEmitter") or obj:IsA("BillboardGui") or obj:IsA("Decal") or obj:IsA("Texture") then
-                    extremeClean(obj)
+                    totalWipe(obj)
                 end
             end
         end
     end)
+    
+    -- Theo dõi object mới sinh ra
+    Workspace.DescendantAdded:Connect(function(obj)
+        totalWipe(obj)
+    end)
 end
 
 -- =====================================================================
--- PHẦN 2: GIAO DIỆN CHILL AFK + YOUTUBE
+-- PHẦN 2: GIAO DIỆN CHILL AFK + YOUTUBE (Giữ nguyên)
 -- =====================================================================
 
--- Danh sách phát (Playlist)
 local Playlist = {
     {name = "Lã Phong Lâm - Tuyết", id = "YQ8p9Q4h7zM"},
     {name = "Lã Phong Lâm - Hoa Nở", id = "vT8N6bJ4y2A"},
-    {name = "Lã Phong Lâm - Mộng Uyên Ương", id = "x8V4G9k2n1Q"},
     {name = "Minecraft Lofi Chill", id = "jfKfPfyJRdk"},
     {name = "Minecraft Ambience", id = "1S6fZ4t2c0Y"}
 }
@@ -131,7 +130,6 @@ local function createChillUI()
     chillGui.DisplayOrder = 999
     chillGui.Parent = playerGui
 
-    -- Khung chính
     local mainFrame = Instance.new("Frame")
     mainFrame.Size = UDim2.fromOffset(400, 300)
     mainFrame.Position = UDim2.new(1, -420, 1, -320)
@@ -143,7 +141,6 @@ local function createChillUI()
     local mc = Instance.new("UICorner"); mc.CornerRadius = UDim.new(0, 12); mc.Parent = mainFrame
     local ms = Instance.new("UIStroke"); ms.Color = Color3.fromRGB(200, 50, 50); ms.Thickness = 1.5; ms.Transparency = 0.3; ms.Parent = mainFrame
 
-    -- Thanh tiêu đề (Kéo thả)
     local titleBar = Instance.new("Frame")
     titleBar.Size = UDim2.new(1, 0, 0, 30)
     titleBar.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
@@ -155,7 +152,7 @@ local function createChillUI()
     titleText.Size = UDim2.new(1, -80, 1, 0)
     titleText.Position = UDim2.fromOffset(10, 0)
     titleText.BackgroundTransparency = 1
-    titleText.Text = "📺 Chill AFK - Lã Phong Lâm & Minecraft"
+    titleText.Text = "📺 Chill AFK - No Mercy Mode"
     titleText.TextColor3 = Color3.fromRGB(240, 240, 240)
     titleText.Font = Enum.Font.GothamBold
     titleText.TextSize = 11
@@ -173,7 +170,6 @@ local function createChillUI()
     hideBtn.Parent = titleBar
     local hbc = Instance.new("UICorner"); hbc.CornerRadius = UDim.new(1, 0); hbc.Parent = hideBtn
 
-    -- Khung chứa Video
     local videoFrame = Instance.new("Frame")
     videoFrame.Size = UDim2.new(1, -20, 0, 200)
     videoFrame.Position = UDim2.fromOffset(10, 35)
@@ -192,7 +188,6 @@ local function createChillUI()
     videoLabel.TextSize = 12
     videoLabel.Parent = videoFrame
 
-    -- Thanh điều khiển (Playlist)
     local controlBar = Instance.new("Frame")
     controlBar.Size = UDim2.new(1, -20, 0, 40)
     controlBar.Position = UDim2.fromOffset(10, 245)
@@ -212,7 +207,6 @@ local function createChillUI()
     songName.TextXAlignment = Enum.TextXAlignment.Left
     songName.Parent = controlBar
 
-    -- Nút Next
     local nextBtn = Instance.new("TextButton")
     nextBtn.Size = UDim2.fromOffset(30, 30)
     nextBtn.Position = UDim2.new(1, -40, 0.5, -15)
@@ -224,36 +218,29 @@ local function createChillUI()
     nextBtn.Parent = controlBar
     local nbc = Instance.new("UICorner"); nbc.CornerRadius = UDim.new(0, 6); nbc.Parent = nextBtn
 
-    -- Hàm tải video WebView
     local function loadVideo(index)
         local track = Playlist[index]
         songName.Text = track.name
-        
-        -- Xóa WebView cũ
         local oldWv = playerGui:FindFirstChild("WebView")
         if oldWv then oldWv:Destroy() end
 
         pcall(function()
             local url = "https://www.youtube.com/embed/" .. track.id .. "?autoplay=1"
-            -- Gọi API của Executor để nhúng iframe
             if WebView then
                 WebView.new(url, videoFrame)
                 videoLabel.Visible = false
             else
-                -- Fallback nếu Executor không hỗ trợ
                 videoLabel.Text = "Đang phát: " .. track.name
             end
         end)
     end
 
-    -- Sự kiện Next
     nextBtn.MouseButton1Click:Connect(function()
         currentTrack = currentTrack + 1
         if currentTrack > #Playlist then currentTrack = 1 end
         loadVideo(currentTrack)
     end)
 
-    -- Logic kéo thả UI
     local dragging, dragStart, startPos
     titleBar.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -272,7 +259,6 @@ local function createChillUI()
         end
     end)
 
-    -- Ẩn/Hiện UI
     hideBtn.MouseButton1Click:Connect(function()
         mainFrame.Visible = false
         local reopenBtn = Instance.new("TextButton")
@@ -296,18 +282,9 @@ end
 -- CHẠY SCRIPT
 -- =====================================================================
 local ok, err = pcall(function()
-    extremeEnvironment() -- Tối ưu môi trường (ánh sáng, sương)
-    
-    for _, obj in ipairs(Workspace:GetDescendants()) do 
-        extremeClean(obj) -- Quét sạch sẽ 1 lần đầu
-    end
-    
-    setupLiveCleaner() -- Bật chế độ dọn rác liên tục
-    createChillUI() -- Tạo giao diện Chill + YouTube
+    destroyEnvironment()
+    startWiper()
+    createChillUI()
 end)
 
-if ok then 
-    print("[SAE Ultimate AFK] Loaded successfully.")
-else 
-    warn("[SAE Ultimate AFK] Error: " .. tostring(err))
-end
+if ok then print("[SAE No Mercy] Loaded successfully.") else warn("[SAE] Error: " .. tostring(err)) end
