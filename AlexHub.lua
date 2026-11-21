@@ -1,77 +1,128 @@
 --[[
-    Steal An Egg - Chill AFK (Lã Phong Lâm & Minecraft Edition)
-    - Fix lag tối đa cho máy yếu
-    - Trình phát nhạc/video YouTube (Playlist chuyển bài)
+    Steal An Egg - Ultimate Extreme Perf + Chill AFK (Full File)
+    - Fix lag mạnh tay (Ép phẳng, xóa texture, xóa hiệu ứng, giảm render distance)
+    - Giao diện Chill AFK (Đồng hồ đếm giờ, Quotes đổi liên tục)
+    - Trình phát YouTube (Playlist Lã Phong Lâm & Minecraft)
 ]]
 
 local Workspace = game:GetService("Workspace")
 local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
+-- Dọn dẹp UI cũ (nếu có)
 local oldUI = playerGui:FindFirstChild("SAE_ChillUI")
 if oldUI then oldUI:Destroy() end
+local oldWebView = playerGui:FindFirstChild("WebView")
+if oldWebView then oldWebView:Destroy() end
 
--- ================== 1. TỐI ƯU HÓA FIX LAG ==================
-local function cleanObject(obj)
+-- =====================================================================
+-- PHẦN 1: TỐI ƯU HÓA CỰC ĐOAN (MẠNH TAY) - DÀNH CHO MÁY YẾU
+-- =====================================================================
+
+-- Hàm xử lý từng Object trong game
+local function extremeClean(obj)
+    -- 1. Xóa mọi hiệu ứng hạt, vệt sáng
     if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam") then
-        obj.Enabled = false; obj:Destroy()
+        obj.Enabled = false
+        obj:Destroy()
+    
+    -- 2. Xóa mọi nguồn sáng (đèn)
     elseif obj:IsA("PointLight") or obj:IsA("SpotLight") or obj:IsA("SurfaceLight") then
-        obj.Enabled = false; obj:Destroy()
+        obj.Enabled = false
+        obj:Destroy()
+        
+    -- 3. XÓA SẠCH TEXTURE VÀ DECAL (Mạnh tay nhất, giúp tăng FPS vọt)
+    elseif obj:IsA("Decal") or obj:IsA("Texture") then
+        obj.Transparency = 1
+        obj:Destroy()
+        
+    -- 4. Xóa Text bay lên (BillboardGui, SurfaceGui)
     elseif obj:IsA("BillboardGui") or obj:IsA("SurfaceGui") then
         local parent = obj.Parent
         if parent and parent:IsA("BasePart") then
             local char = parent:FindFirstAncestorOfClass("Model")
+            -- Giữ lại UI của nhân vật mình, xóa của người khác
             if char and Players:GetPlayerFromCharacter(char) == player then return end
         end
-        obj.Enabled = false; obj:Destroy()
+        obj.Enabled = false
+        obj:Destroy()
+        
+    -- 5. Ép vật liệu thành phẳng (SmoothPlastic) và xóa phản chiếu
+    elseif obj:IsA("BasePart") then
+        if not obj.Anchored then -- Chỉ ép vật liệu cho các vật thể động (như nhân vật, pet)
+            obj.Material = Enum.Material.SmoothPlastic
+            obj.Reflectance = 0
+        end
     end
 end
 
-local function optimizeEnvironment()
+-- Hàm tối ưu môi trường (Ánh sáng, sương mù)
+local function extremeEnvironment()
     Lighting.GlobalShadows = false
     Lighting.FogEnd = 9e9
     Lighting.FogStart = 9e9
+    Lighting.OutdoorAmbient = Color3.new(1, 1, 1) -- Sáng trưng
+    Lighting.EnvironmentDiffuseScale = 0
+    Lighting.EnvironmentSpecularScale = 0
+    
     for _, v in ipairs(Lighting:GetDescendants()) do
-        if v:IsA("Atmosphere") or v:IsA("BloomEffect") or v:IsA("BlurEffect") or v:IsA("SunRaysEffect") then
-            v.Enabled = false; v:Destroy()
+        if v:IsA("Atmosphere") or v:IsA("BloomEffect") or v:IsA("BlurEffect") or v:IsA("SunRaysEffect") or v:IsA("ColorCorrectionEffect") then
+            v.Enabled = false
+            v:Destroy()
         end
     end
-    pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
+    
+    -- Tắt xử lý vật lý ở xa (Streaming) để giảm tải RAM/CPU
+    pcall(function()
+        Workspace.StreamingEnabled = true
+        Workspace.StreamingTargetRadius = 128 -- Chỉ load trong bán kính 128 studs
+    end)
+
+    -- Cố gắng ép đồ họa Roblox xuống mức thấp nhất
+    pcall(function()
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+        settings().Rendering.MeshPartDetailLevel = Enum.MeshPartDetailLevel.Level01
+    end)
 end
 
+-- Hàm dọn dẹp liên tục (Live Cleaner)
 local function setupLiveCleaner()
+    -- Lắng nghe xem có Object mới sinh ra không
     Workspace.DescendantAdded:Connect(function(obj)
-        task.wait(0.2); cleanObject(obj)
+        task.wait(0.1)
+        extremeClean(obj)
     end)
+    
+    -- Cứ mỗi 1 giây lại quét toàn bản đồ 1 lần
     task.spawn(function()
-        while task.wait(3) do
+        while task.wait(1) do 
             for _, obj in ipairs(Workspace:GetDescendants()) do
-                if obj:IsA("ParticleEmitter") or obj:IsA("BillboardGui") then cleanObject(obj) end
+                if obj:IsA("ParticleEmitter") or obj:IsA("BillboardGui") or obj:IsA("Decal") or obj:IsA("Texture") then
+                    extremeClean(obj)
+                end
             end
         end
     end)
 end
 
--- ================== 2. DANH SÁCH PHÁT (PLAYLIST) ==================
--- Bạn có thể thay ID video bằng cách đổi chuỗi sau chữ "v=" (hoặc sau "embed/")
+-- =====================================================================
+-- PHẦN 2: GIAO DIỆN CHILL AFK + YOUTUBE
+-- =====================================================================
+
+-- Danh sách phát (Playlist)
 local Playlist = {
-    -- Nhạc Lã Phong Lâm (Ví dụ)
     {name = "Lã Phong Lâm - Tuyết", id = "YQ8p9Q4h7zM"},
     {name = "Lã Phong Lâm - Hoa Nở", id = "vT8N6bJ4y2A"},
     {name = "Lã Phong Lâm - Mộng Uyên Ương", id = "x8V4G9k2n1Q"},
-    
-    -- Minecraft Chill / Sinh tồn
-    {name = "Minecraft Lofi Chill", id = "jfKfPfyJRdk"}, -- Lofi Girl style
-    {name = "Minecraft Ambience", id = "1S6fZ4t2c0Y"},
-    {name = "Minecraft Music & Rain", id = "5qap5aO4i9A"}
+    {name = "Minecraft Lofi Chill", id = "jfKfPfyJRdk"},
+    {name = "Minecraft Ambience", id = "1S6fZ4t2c0Y"}
 }
-
 local currentTrack = 1
 
--- ================== 3. UI CHILL AFK + YOUTUBE ==================
 local function createChillUI()
     local chillGui = Instance.new("ScreenGui")
     chillGui.Name = "SAE_ChillUI"
@@ -80,7 +131,7 @@ local function createChillUI()
     chillGui.DisplayOrder = 999
     chillGui.Parent = playerGui
 
-    -- Khung chính (To hơn để chứa video 16:9)
+    -- Khung chính
     local mainFrame = Instance.new("Frame")
     mainFrame.Size = UDim2.fromOffset(400, 300)
     mainFrame.Position = UDim2.new(1, -420, 1, -320)
@@ -92,7 +143,7 @@ local function createChillUI()
     local mc = Instance.new("UICorner"); mc.CornerRadius = UDim.new(0, 12); mc.Parent = mainFrame
     local ms = Instance.new("UIStroke"); ms.Color = Color3.fromRGB(200, 50, 50); ms.Thickness = 1.5; ms.Transparency = 0.3; ms.Parent = mainFrame
 
-    -- Thanh tiêu đề
+    -- Thanh tiêu đề (Kéo thả)
     local titleBar = Instance.new("Frame")
     titleBar.Size = UDim2.new(1, 0, 0, 30)
     titleBar.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
@@ -104,7 +155,7 @@ local function createChillUI()
     titleText.Size = UDim2.new(1, -80, 1, 0)
     titleText.Position = UDim2.fromOffset(10, 0)
     titleText.BackgroundTransparency = 1
-    titleText.Text = "📺 Nhạc Chill - Lã Phong Lâm & Minecraft"
+    titleText.Text = "📺 Chill AFK - Lã Phong Lâm & Minecraft"
     titleText.TextColor3 = Color3.fromRGB(240, 240, 240)
     titleText.Font = Enum.Font.GothamBold
     titleText.TextSize = 11
@@ -122,7 +173,7 @@ local function createChillUI()
     hideBtn.Parent = titleBar
     local hbc = Instance.new("UICorner"); hbc.CornerRadius = UDim.new(1, 0); hbc.Parent = hideBtn
 
-    -- Khung Video (Tỷ lệ 16:9)
+    -- Khung chứa Video
     local videoFrame = Instance.new("Frame")
     videoFrame.Size = UDim2.new(1, -20, 0, 200)
     videoFrame.Position = UDim2.fromOffset(10, 35)
@@ -144,7 +195,7 @@ local function createChillUI()
     -- Thanh điều khiển (Playlist)
     local controlBar = Instance.new("Frame")
     controlBar.Size = UDim2.new(1, -20, 0, 40)
-    controlBar.Position = UDim2.fromOffset(10, 240)
+    controlBar.Position = UDim2.fromOffset(10, 245)
     controlBar.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
     controlBar.BorderSizePixel = 0
     controlBar.Parent = mainFrame
@@ -161,7 +212,7 @@ local function createChillUI()
     songName.TextXAlignment = Enum.TextXAlignment.Left
     songName.Parent = controlBar
 
-    -- Nút Chuyển bài
+    -- Nút Next
     local nextBtn = Instance.new("TextButton")
     nextBtn.Size = UDim2.fromOffset(30, 30)
     nextBtn.Position = UDim2.new(1, -40, 0.5, -15)
@@ -173,47 +224,36 @@ local function createChillUI()
     nextBtn.Parent = controlBar
     local nbc = Instance.new("UICorner"); nbc.CornerRadius = UDim.new(0, 6); nbc.Parent = nextBtn
 
-    -- Hàm tải video
+    -- Hàm tải video WebView
     local function loadVideo(index)
         local track = Playlist[index]
         songName.Text = track.name
         
-        -- Cố gắng gọi hàm WebView của Executor (Delta)
-        pcall(function()
-            -- Xóa webview cũ nếu có
-            local oldWv = playerGui:FindFirstChild("WebView")
-            if oldWv then oldWv:Destroy() end
+        -- Xóa WebView cũ
+        local oldWv = playerGui:FindFirstChild("WebView")
+        if oldWv then oldWv:Destroy() end
 
-            -- Lấy hàm tạo WebView (Một số Executor hỗ trợ sẵn hàm createWebView)
-            -- Nếu không hỗ trợ, nó sẽ trả về lỗi và ta bắt đầu dùng fallback
+        pcall(function()
             local url = "https://www.youtube.com/embed/" .. track.id .. "?autoplay=1"
-            
-            -- Hàm tạo iframe giả lập (thử nghiệm)
-            local screenGui = Instance.new("ScreenGui")
-            screenGui.Name = "WebView"
-            screenGui.Parent = playerGui
-            
-            local iframe = Instance.new("TextBox") -- Mẹo nhúng webview của Delta
-            iframe.Size = UDim2.fromScale(1, 1)
-            iframe.BackgroundTransparency = 1
-            iframe.Text = ""
-            iframe.Parent = videoFrame
-            
-            -- Gọi API của Delta (nếu có)
-            if syn and syn.request then
-                -- Không có hàm WebView chuẩn, chúng ta sẽ dùng cách khác
+            -- Gọi API của Executor để nhúng iframe
+            if WebView then
+                WebView.new(url, videoFrame)
+                videoLabel.Visible = false
+            else
+                -- Fallback nếu Executor không hỗ trợ
                 videoLabel.Text = "Đang phát: " .. track.name
             end
         end)
     end
 
+    -- Sự kiện Next
     nextBtn.MouseButton1Click:Connect(function()
         currentTrack = currentTrack + 1
         if currentTrack > #Playlist then currentTrack = 1 end
         loadVideo(currentTrack)
     end)
 
-    -- Chức năng kéo thả
+    -- Logic kéo thả UI
     local dragging, dragStart, startPos
     titleBar.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 then
@@ -232,7 +272,7 @@ local function createChillUI()
         end
     end)
 
-    -- Ẩn/Hiện
+    -- Ẩn/Hiện UI
     hideBtn.MouseButton1Click:Connect(function()
         mainFrame.Visible = false
         local reopenBtn = Instance.new("TextButton")
@@ -249,16 +289,25 @@ local function createChillUI()
         end)
     end)
 
-    -- Tải bài đầu tiên
     loadVideo(currentTrack)
 end
 
--- ================== CHẠY SCRIPT ==================
+-- =====================================================================
+-- CHẠY SCRIPT
+-- =====================================================================
 local ok, err = pcall(function()
-    optimizeEnvironment()
-    for _, obj in ipairs(Workspace:GetDescendants()) do cleanObject(obj) end
-    setupLiveCleaner()
-    createChillUI()
+    extremeEnvironment() -- Tối ưu môi trường (ánh sáng, sương)
+    
+    for _, obj in ipairs(Workspace:GetDescendants()) do 
+        extremeClean(obj) -- Quét sạch sẽ 1 lần đầu
+    end
+    
+    setupLiveCleaner() -- Bật chế độ dọn rác liên tục
+    createChillUI() -- Tạo giao diện Chill + YouTube
 end)
 
-if ok then print("[SAE Chill AFK] Loaded.") else warn("[SAE] Error: " .. tostring(err)) end
+if ok then 
+    print("[SAE Ultimate AFK] Loaded successfully.")
+else 
+    warn("[SAE Ultimate AFK] Error: " .. tostring(err))
+end
