@@ -1,37 +1,30 @@
 --[[
-    AlexHub - Script Fix Lag Tự Động (Không UI)
-    Chạy ngầm - Tự động tối ưu hóa ngay khi Execute
+    Steal An Egg - Ultimate Cleaner + Anti-AFK
+    Xóa sạch mọi hiệu ứng lag, giữ đồ họa mượt nhất có thể.
+    Chạy ngầm - Không UI.
 ]]
 
 local Workspace = game:GetService("Workspace")
 local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
+local VirtualUser = game:GetService("VirtualUser")
 local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
--- ================== CẤU HÌNH MỨC FIX LAG ==================
--- Bạn có thể sửa số này để đổi mức độ fix:
--- 10 = Nhẹ (Tắt bóng, sương mù)
--- 30 = Vừa (Tắt đèn phụ, ambient)
--- 50 = Cao (Đổi vật liệu phẳng)
--- 80 = Rất cao (Tắt particle, decal)
--- 100 = Tối đa (Ẩn tên người chơi, tắt mọi thứ)
-local FIX_LEVEL = 100 
--- ==========================================================
-
--- Hàm hiển thị thông báo nhỏ (Toast)
+-- ================== THÔNG BÁO ==================
 local function showToast(text)
     local toastGui = Instance.new("ScreenGui")
-    toastGui.Name = "AlexHub_Toast"
+    toastGui.Name = "SAE_Toast"
     toastGui.ResetOnSpawn = false
     toastGui.IgnoreGuiInset = true
     toastGui.DisplayOrder = 999
     toastGui.Parent = playerGui
 
     local frame = Instance.new("Frame")
-    frame.Size = UDim2.fromOffset(250, 50)
-    frame.Position = UDim2.new(0.5, -125, 0, -60) -- Bắt đầu ẩn trên màn hình
+    frame.Size = UDim2.fromOffset(300, 50)
+    frame.Position = UDim2.new(0.5, -150, 0, -60)
     frame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
     frame.BorderSizePixel = 0
     frame.Parent = toastGui
@@ -54,89 +47,143 @@ local function showToast(text)
     label.TextSize = 14
     label.Parent = frame
 
-    -- Hiệu ứng trượt xuống
     TweenService:Create(frame, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-        Position = UDim2.new(0.5, -125, 0, 20)
+        Position = UDim2.new(0.5, -150, 0, 20)
     }):Play()
 
-    -- Tự động ẩn sau 3 giây
     task.delay(3, function()
         TweenService:Create(frame, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-            Position = UDim2.new(0.5, -125, 0, -60)
+            Position = UDim2.new(0.5, -150, 0, -60)
         }):Play()
         task.wait(0.3)
         toastGui:Destroy()
     end)
 end
 
--- ================== LOGIC FIX LAG ==================
-local function runFix()
-    -- Bậc 10
-    if FIX_LEVEL >= 10 then
-        Lighting.GlobalShadows = false
-        Lighting.FogEnd = 9e9
-        Lighting.FogStart = 9e9
+-- ================== HÀM XÓA HIỆU ỨNG (CLEANER) ==================
+local function cleanObject(obj)
+    -- Xóa Particle (hiệu ứng hạt của pet, trứng, kỹ năng)
+    if obj:IsA("ParticleEmitter") then
+        obj.Enabled = false
+        obj:Destroy() -- Xóa luôn cho nhẹ
     end
     
-    -- Bậc 30
-    if FIX_LEVEL >= 30 then
-        Lighting.OutdoorAmbient = Color3.new(1, 1, 1)
-        Lighting.EnvironmentDiffuseScale = 0
-        Lighting.EnvironmentSpecularScale = 0
-        for _, obj in ipairs(Workspace:GetDescendants()) do
-            if obj:IsA("PointLight") or obj:IsA("SpotLight") or obj:IsA("SurfaceLight") then
-                obj.Enabled = false
-            end
-        end
+    -- Xóa Trail (vệt sáng khi chạy)
+    if obj:IsA("Trail") then
+        obj.Enabled = false
+        obj:Destroy()
     end
     
-    -- Bậc 50
-    if FIX_LEVEL >= 50 then
-        for _, obj in ipairs(Workspace:GetDescendants()) do
-            if obj:IsA("BasePart") then
-                obj.Material = Enum.Material.SmoothPlastic
-            end
-        end
+    -- Xóa Beam (tia sáng)
+    if obj:IsA("Beam") then
+        obj.Enabled = false
+        obj:Destroy()
     end
     
-    -- Bậc 80
-    if FIX_LEVEL >= 80 then
-        for _, obj in ipairs(Workspace:GetDescendants()) do
-            if obj:IsA("ParticleEmitter") or obj:IsA("Beam") or obj:IsA("Trail") then
-                obj.Enabled = false
-            elseif obj:IsA("Decal") or obj:IsA("Texture") then
-                obj.Transparency = 1
-            end
-        end
+    -- Tắt đèn (đèn từ pet, môi trường)
+    if obj:IsA("PointLight") or obj:IsA("SpotLight") or obj:IsA("SurfaceLight") then
+        obj.Enabled = false
+        obj:Destroy()
     end
     
-    -- Bậc 100
-    if FIX_LEVEL >= 100 then
-        -- Ẩn NameTag người chơi khác
-        for _, p in ipairs(Players:GetPlayers()) do
-            if p ~= player and p.Character then
-                local h = p.Character:FindFirstChild("Head")
-                if h then
-                    local g = h:FindFirstChildOfClass("BillboardGui")
-                    if g then g.Enabled = false end
-                end
+    -- Xóa Text bay lên (kiếm tiền, thông báo rác)
+    if obj:IsA("BillboardGui") or obj:IsA("SurfaceGui") then
+        -- Giữ lại GUI của nhân vật chính (để không mất UI của mình)
+        local parent = obj.Parent
+        if parent and parent:IsA("BasePart") then
+            local char = parent:FindFirstAncestorOfClass("Model")
+            if char then
+                local plr = Players:GetPlayerFromCharacter(char)
+                if plr == player then return end -- Bỏ qua GUI của mình
             end
         end
-        -- Xóa hiệu ứng môi trường (Atmosphere, Bloom, Blur...)
-        for _, v in ipairs(Lighting:GetDescendants()) do
-            if v:IsA("Atmosphere") or v:IsA("BloomEffect") or v:IsA("BlurEffect") or v:IsA("ColorCorrectionEffect") or v:IsA("SunRaysEffect") then
-                v.Enabled = false
-            end
-        end
+        obj.Enabled = false
+        obj:Destroy()
+    end
+    
+    -- Xóa hiệu ứng âm thanh 3D (nếu có)
+    if obj:IsA("Sound") and obj.RollOffMaxDistance > 0 then
+        obj:Destroy()
     end
 end
 
+-- ================== TỐI ƯU HÓA MÔI TRƯỜNG ==================
+local function optimizeEnvironment()
+    -- Tắt bóng đổ, sương mù
+    Lighting.GlobalShadows = false
+    Lighting.FogEnd = 9e9
+    Lighting.FogStart = 9e9
+    
+    -- Tắt mọi hiệu ứng hậu kỳ (Bloom, Blur, v.v.)
+    for _, v in ipairs(Lighting:GetDescendants()) do
+        if v:IsA("Atmosphere") or v:IsA("BloomEffect") or v:IsA("BlurEffect") or v:IsA("SunRaysEffect") or v:IsA("ColorCorrectionEffect") then
+            v.Enabled = false
+            v:Destroy()
+        end
+    end
+    
+    -- Chỉnh chất lượng đồ họa của Roblox xuống thấp nhất
+    pcall(function()
+        settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+    end)
+end
+
+-- ================== QUÉT SẠCH TOÀN BỘ BẢN ĐỒ ==================
+local function fullClean()
+    for _, obj in ipairs(Workspace:GetDescendants()) do
+        cleanObject(obj)
+    end
+end
+
+-- ================== TỰ ĐỘNG DỌN DẸP LIÊN TỤC ==================
+local function setupLiveCleaner()
+    Workspace.DescendantAdded:Connect(function(obj)
+        task.wait(0.3) -- Đợi object load xong
+        cleanObject(obj)
+    end)
+    
+    -- Quét lại mỗi 5 giây để đảm bảo không sót
+    task.spawn(function()
+        while task.wait(5) do
+            for _, obj in ipairs(Workspace:GetDescendants()) do
+                if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("BillboardGui") then
+                    cleanObject(obj)
+                end
+            end
+        end
+    end)
+end
+
+-- ================== ANTI-AFK ==================
+-- Tự động nhấn Space hoặc di chuyển để không bị đá
+local function setupAntiAFK()
+    player.Idled:Connect(function()
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
+        print("[Anti-AFK] Đã chống đá (Idle)")
+    end)
+    
+    -- Gửi tín hiệu chuột mỗi 60s cho chắc
+    task.spawn(function()
+        while task.wait(60) do
+            VirtualUser:CaptureController()
+            VirtualUser:ClickButton2(Vector2.new())
+        end
+    end)
+end
+
 -- ================== CHẠY SCRIPT ==================
-local ok, err = pcall(runFix)
+local ok, err = pcall(function()
+    optimizeEnvironment()
+    fullClean()
+    setupLiveCleaner()
+    setupAntiAFK()
+end)
+
 if ok then
-    showToast("⚡ AlexHub: Đã tối ưu hóa xong (" .. FIX_LEVEL .. "%)")
-    print("[AlexHub] Auto-fix loaded successfully at " .. FIX_LEVEL .. "%")
+    showToast("🧹 Đã dọn sạch hiệu ứng & Bật Anti-AFK!")
+    print("[Steal An Egg Ultimate Cleaner] Loaded.")
 else
-    showToast("❌ AlexHub: Có lỗi xảy ra!")
-    warn("[AlexHub] Error: " .. tostring(err))
+    showToast("❌ Lỗi: " .. tostring(err))
+    warn("[Cleaner] Error: " .. tostring(err))
 end
